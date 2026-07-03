@@ -1,15 +1,10 @@
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
-import os
-import psycopg
-import google.generativeai as genai
+from groq import Groq
 
 app = FastAPI()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 class Ask(BaseModel):
     prompt: str
@@ -20,12 +15,8 @@ async def health():
 
 @app.post("/ask")
 async def ask_ziva(body: Ask):
-    response = model.generate_content(f"Você é a ZIVA, uma IA. Responda em pt-BR, curto: {body.prompt}")
-    
-    with psycopg.connect(DATABASE_URL) as conn:
-        with conn.cursor() as cur:
-            cur.execute("CREATE TABLE IF NOT EXISTS chats (id SERIAL PRIMARY KEY, prompt TEXT, resposta TEXT)")
-            cur.execute("INSERT INTO chats (prompt, resposta) VALUES (%s, %s)", (body.prompt, response.text))
-            conn.commit()
-
-    return {"resposta": response.text}
+    chat_completion = client.chat.completions.create(
+        messages=[{"role": "user", "content": f"Você é a ZIVA, uma IA. Responda em pt-BR, curto: {body.prompt}"}],
+        model="llama3-8b-8192",
+    )
+    return {"resposta": chat_completion.choices[0].message.content}
